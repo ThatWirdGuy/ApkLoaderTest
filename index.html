@@ -2,67 +2,89 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Serverless APK Loader</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APK Web Player (Beta)</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; text-align: center; padding: 50px; }
-        #drop-zone { border: 2px dashed #3f51b5; border-radius: 20px; padding: 60px; cursor: pointer; transition: 0.3s; }
-        #drop-zone:hover { background: #1a1a1a; border-color: #5c6bc0; }
-        .file-list { margin-top: 20px; text-align: left; background: #1e1e1e; padding: 20px; border-radius: 10px; display: none; }
-        h1 { color: #3f51b5; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: white; text-align: center; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        .container { background: #1e293b; padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 400px; }
+        #drop-zone { border: 2px dashed #38bdf8; border-radius: 10px; padding: 40px; cursor: pointer; transition: 0.3s; margin-bottom: 20px; }
+        #drop-zone:hover { background: #334155; border-color: #0ea5e9; }
+        #emulator-container { display: none; margin-top: 20px; }
+        iframe { border: none; border-radius: 10px; box-shadow: 0 0 20px rgba(56, 189, 248, 0.5); }
+        .hidden { display: none; }
+        .loader-text { color: #94a3b8; font-size: 0.9rem; }
     </style>
 </head>
 <body>
 
-    <h1>Local APK Loader</h1>
-    <p>Drag an APK here to "load" its contents into browser memory.</p>
-
-    <div id="drop-zone">
-        <p>Drop APK file here or click to select</p>
-        <input type="file" id="file-input" accept=".apk" style="display:none">
+    <div class="container" id="upload-panel">
+        <h2 style="color: #38bdf8;">APK Web Player</h2>
+        <div id="drop-zone">
+            <p>Drag & Drop APK File Here</p>
+            <p class="loader-text">or click to select</p>
+            <input type="file" id="apk-input" accept=".apk" class="hidden">
+        </div>
+        <p class="loader-text">Note: This uses the Appetize API to stream the app to your browser.</p>
     </div>
 
-    <div id="output" class="file-list">
-        <h3>APK Contents (Extracted Locally):</h3>
-        <ul id="file-tree"></ul>
+    <div id="emulator-container">
+        <button onclick="location.reload()" style="background: #ef4444; border: none; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 10px;">Close & Reset</button>
+        <br>
+        <div id="iframe-wrapper"></div>
     </div>
 
     <script>
         const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('file-input');
-        const output = document.getElementById('output');
-        const fileTree = document.getElementById('file-tree');
+        const apkInput = document.getElementById('apk-input');
+        const uploadPanel = document.getElementById('upload-panel');
+        const emuContainer = document.getElementById('emulator-container');
+        const iframeWrapper = document.getElementById('iframe-wrapper');
 
-        dropZone.onclick = () => fileInput.click();
+        dropZone.onclick = () => apkInput.click();
 
-        fileInput.onchange = (e) => handleFile(e.target.files[0]);
+        apkInput.onchange = (e) => handleFile(e.target.files[0]);
 
         async function handleFile(file) {
             if (!file) return;
             
-            fileTree.innerHTML = "<li>Loading and decompressing...</li>";
-            output.style.display = "block";
+            dropZone.innerHTML = "<p>Uploading to Virtual Device...</p>";
 
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                const zip = new JSZip();
-                const contents = await zip.loadAsync(e.target.result);
-                
-                fileTree.innerHTML = "";
-                Object.keys(contents.files).slice(0, 15).forEach(filename => {
-                    const li = document.createElement('li');
-                    li.textContent = filename;
-                    fileTree.appendChild(li);
+            // 1. We create a Form to send to Appetize's public endpoint
+            // Note: For a private key, you'd register at Appetize.io.
+            // This example shows the structure for how it integrates.
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('platform', 'android');
+
+            try {
+                // To do this fully 'client-side' without your own API key, 
+                // you usually use their 'Guest' upload or your own token.
+                // Replace 'YOUR_PUBLIC_KEY' if you have one.
+                const response = await fetch('https://api.appetize.io/v1/apps', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'Authorization': 'Basic ' + btoa('YOUR_API_TOKEN_HERE' + ':')
+                    }
                 });
+
+                const data = await response.json();
+                const publicKey = data.publicKey;
+
+                // 2. Display the Emulator
+                uploadPanel.style.display = 'none';
+                emuContainer.style.display = 'block';
                 
-                const count = Object.keys(contents.files).length;
-                if (count > 15) {
-                    const li = document.createElement('li');
-                    li.textContent = `... and ${count - 15} more files.`;
-                    fileTree.appendChild(li);
-                }
-            };
-            reader.readAsArrayBuffer(file);
+                iframeWrapper.innerHTML = `
+                    <iframe src="https://appetize.io/embed/${publicKey}?device=nexus5&osVersion=8.1&scale=75" 
+                            width="300px" height="600px" scrolling="no"></iframe>
+                `;
+
+            } catch (err) {
+                alert("To run this, you need to add an Appetize.io API token to the code.");
+                console.error(err);
+                dropZone.innerHTML = "<p>Error: API Token Required</p>";
+            }
         }
     </script>
 </body>
