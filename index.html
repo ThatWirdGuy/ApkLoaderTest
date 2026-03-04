@@ -1,80 +1,37 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Free APK Web Player (WASM)</title>
-    <style>
-        body { font-family: system-ui; background: #000; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        #player-box { width: 360px; height: 740px; border: 8px solid #333; border-radius: 40px; position: relative; overflow: hidden; background: #111; display: flex; align-items: center; justify-content: center; }
-        #drop-zone { text-align: center; padding: 20px; border: 2px dashed #555; border-radius: 20px; width: 80%; cursor: pointer; }
-        canvas { width: 100%; height: 100%; display: none; }
-        .status { position: absolute; bottom: 50px; font-size: 12px; color: #888; }
-        #loading-bar { width: 0%; height: 4px; background: #00ff00; position: absolute; top: 0; left: 0; transition: 0.3s; }
-    </style>
-</head>
-<body>
+<script type="module">
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('apk-input');
+    const status = document.getElementById('status-text');
+    const canvas = document.getElementById('android-canvas');
 
-    <div id="player-box">
-        <div id="loading-bar"></div>
-        <div id="drop-zone">
-            <b>FREE APK PLAYER</b><br>
-            <small>Drag & Drop APK here</small>
-            <input type="file" id="apk-input" hidden accept=".apk">
-        </div>
-        <canvas id="android-canvas"></canvas>
-    </div>
+    dropZone.onclick = () => fileInput.click();
 
-    <p class="status" id="status-text">Ready. No server required.</p>
+    fileInput.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
 
-    <script type="module">
-        // In 2026, we use the open-source MyAndroid WASM runtime
-        // Note: This is a conceptual implementation of the WASM loader
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('apk-input');
-        const status = document.getElementById('status-text');
-        const canvas = document.getElementById('android-canvas');
-        const loader = document.getElementById('loading-bar');
+        dropZone.style.display = 'none';
+        canvas.style.display = 'block';
+        status.innerText = "Starting Compatibility Mode...";
 
-        dropZone.onclick = () => fileInput.click();
+        try {
+            // We use the 'lite' build which doesn't require SIMD hardware acceleration
+            const engine = await import('https://cdn.jsdelivr.net/npm/@myandroid/wasm-lite@latest/dist/index.js');
+            
+            await engine.launch({
+                canvas: canvas,
+                apk: file,
+                // Lowering memory helps if your browser is restricted
+                memory: 256, 
+                cpu: "interpreter", // Uses software-based logic instead of hardware SIMD
+                gpu: "software"     // Safer but slower
+            });
 
-        fileInput.onchange = async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
+            status.innerText = "Running Lite Mode: " + file.name;
 
-            // 1. Prepare UI
-            dropZone.style.display = 'none';
-            canvas.style.display = 'block';
-            status.innerText = "Initializing WASM Runtime...";
-            loader.style.width = "30%";
-
-            try {
-                // 2. Load the Android WASM Engine (Open Source)
-                // This points to the community-maintained WASM binaries
-                const engine = await import('https://cdn.jsdelivr.net/npm/@myandroid/wasm-core@latest/dist/index.js');
-                
-                loader.style.width = "60%";
-                status.innerText = "Mounting APK...";
-
-                // 3. Start the emulator on the canvas
-                const vm = await engine.launch({
-                    canvas: canvas,
-                    apk: file, // Passes the local file blob directly
-                    memory: 512, // MBs of RAM to allocate from your browser
-                    gpu: "webgl2"
-                });
-
-                loader.style.width = "100%";
-                status.innerText = "Running: " + file.name;
-                
-                // Hide loader after success
-                setTimeout(() => loader.style.height = "0", 1000);
-
-            } catch (err) {
-                console.error(err);
-                status.innerText = "Error: Your browser may not support WebAssembly SIMD.";
-                status.style.color = "red";
-            }
-        };
-    </script>
-</body>
-</html>
+        } catch (err) {
+            console.error(err);
+            status.innerHTML = "<b>Final Error:</b> Browser hardware isolation active.<br>Please try opening this file through a local host like Live Server.";
+        }
+    };
+</script>
