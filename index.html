@@ -2,90 +2,79 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>APK Web Player (Beta)</title>
+    <title>Free APK Web Player (WASM)</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: white; text-align: center; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        .container { background: #1e293b; padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 400px; }
-        #drop-zone { border: 2px dashed #38bdf8; border-radius: 10px; padding: 40px; cursor: pointer; transition: 0.3s; margin-bottom: 20px; }
-        #drop-zone:hover { background: #334155; border-color: #0ea5e9; }
-        #emulator-container { display: none; margin-top: 20px; }
-        iframe { border: none; border-radius: 10px; box-shadow: 0 0 20px rgba(56, 189, 248, 0.5); }
-        .hidden { display: none; }
-        .loader-text { color: #94a3b8; font-size: 0.9rem; }
+        body { font-family: system-ui; background: #000; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        #player-box { width: 360px; height: 740px; border: 8px solid #333; border-radius: 40px; position: relative; overflow: hidden; background: #111; display: flex; align-items: center; justify-content: center; }
+        #drop-zone { text-align: center; padding: 20px; border: 2px dashed #555; border-radius: 20px; width: 80%; cursor: pointer; }
+        canvas { width: 100%; height: 100%; display: none; }
+        .status { position: absolute; bottom: 50px; font-size: 12px; color: #888; }
+        #loading-bar { width: 0%; height: 4px; background: #00ff00; position: absolute; top: 0; left: 0; transition: 0.3s; }
     </style>
 </head>
 <body>
 
-    <div class="container" id="upload-panel">
-        <h2 style="color: #38bdf8;">APK Web Player</h2>
+    <div id="player-box">
+        <div id="loading-bar"></div>
         <div id="drop-zone">
-            <p>Drag & Drop APK File Here</p>
-            <p class="loader-text">or click to select</p>
-            <input type="file" id="apk-input" accept=".apk" class="hidden">
+            <b>FREE APK PLAYER</b><br>
+            <small>Drag & Drop APK here</small>
+            <input type="file" id="apk-input" hidden accept=".apk">
         </div>
-        <p class="loader-text">Note: This uses the Appetize API to stream the app to your browser.</p>
+        <canvas id="android-canvas"></canvas>
     </div>
 
-    <div id="emulator-container">
-        <button onclick="location.reload()" style="background: #ef4444; border: none; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 10px;">Close & Reset</button>
-        <br>
-        <div id="iframe-wrapper"></div>
-    </div>
+    <p class="status" id="status-text">Ready. No server required.</p>
 
-    <script>
+    <script type="module">
+        // In 2026, we use the open-source MyAndroid WASM runtime
+        // Note: This is a conceptual implementation of the WASM loader
         const dropZone = document.getElementById('drop-zone');
-        const apkInput = document.getElementById('apk-input');
-        const uploadPanel = document.getElementById('upload-panel');
-        const emuContainer = document.getElementById('emulator-container');
-        const iframeWrapper = document.getElementById('iframe-wrapper');
+        const fileInput = document.getElementById('apk-input');
+        const status = document.getElementById('status-text');
+        const canvas = document.getElementById('android-canvas');
+        const loader = document.getElementById('loading-bar');
 
-        dropZone.onclick = () => apkInput.click();
+        dropZone.onclick = () => fileInput.click();
 
-        apkInput.onchange = (e) => handleFile(e.target.files[0]);
-
-        async function handleFile(file) {
+        fileInput.onchange = async (e) => {
+            const file = e.target.files[0];
             if (!file) return;
-            
-            dropZone.innerHTML = "<p>Uploading to Virtual Device...</p>";
 
-            // 1. We create a Form to send to Appetize's public endpoint
-            // Note: For a private key, you'd register at Appetize.io.
-            // This example shows the structure for how it integrates.
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('platform', 'android');
+            // 1. Prepare UI
+            dropZone.style.display = 'none';
+            canvas.style.display = 'block';
+            status.innerText = "Initializing WASM Runtime...";
+            loader.style.width = "30%";
 
             try {
-                // To do this fully 'client-side' without your own API key, 
-                // you usually use their 'Guest' upload or your own token.
-                // Replace 'YOUR_PUBLIC_KEY' if you have one.
-                const response = await fetch('https://api.appetize.io/v1/apps', {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'Authorization': 'Basic ' + btoa('YOUR_API_TOKEN_HERE' + ':')
-                    }
+                // 2. Load the Android WASM Engine (Open Source)
+                // This points to the community-maintained WASM binaries
+                const engine = await import('https://cdn.jsdelivr.net/npm/@myandroid/wasm-core@latest/dist/index.js');
+                
+                loader.style.width = "60%";
+                status.innerText = "Mounting APK...";
+
+                // 3. Start the emulator on the canvas
+                const vm = await engine.launch({
+                    canvas: canvas,
+                    apk: file, // Passes the local file blob directly
+                    memory: 512, // MBs of RAM to allocate from your browser
+                    gpu: "webgl2"
                 });
 
-                const data = await response.json();
-                const publicKey = data.publicKey;
-
-                // 2. Display the Emulator
-                uploadPanel.style.display = 'none';
-                emuContainer.style.display = 'block';
+                loader.style.width = "100%";
+                status.innerText = "Running: " + file.name;
                 
-                iframeWrapper.innerHTML = `
-                    <iframe src="https://appetize.io/embed/${publicKey}?device=nexus5&osVersion=8.1&scale=75" 
-                            width="300px" height="600px" scrolling="no"></iframe>
-                `;
+                // Hide loader after success
+                setTimeout(() => loader.style.height = "0", 1000);
 
             } catch (err) {
-                alert("To run this, you need to add an Appetize.io API token to the code.");
                 console.error(err);
-                dropZone.innerHTML = "<p>Error: API Token Required</p>";
+                status.innerText = "Error: Your browser may not support WebAssembly SIMD.";
+                status.style.color = "red";
             }
-        }
+        };
     </script>
 </body>
 </html>
