@@ -1,42 +1,90 @@
-<div style='width:100%;height:100%;max-width:100%; background:#000; border-radius:20px; overflow:hidden;'>
-    <div id='game'></div>
-</div>
- 
-<script type='text/javascript'>
-    // This tells the engine to use the Android system instead of N64
-    EJS_player = '#game';
-    EJS_core = 'android';  
-    
-    // We leave gameUrl blank so you can pick the APK from your computer
-    EJS_gameUrl = ''; 
-    
-    // Using the same path that worked for your SM64 test
-    EJS_pathtodata = 'https://cdn.jsdelivr.net/gh/ethanaobrien/emulatorjs@main/data/';
-</script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Private APK Workspace</title>
+    <script src="./engine.js"></script>
+    <style>
+        :root { --accent: #00ff88; --bg: #0a0a0c; --panel: #111114; }
+        body { background: var(--bg); color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Sidebar Styling */
+        #sidebar { width: 280px; background: var(--panel); border-right: 1px solid #222; padding: 25px; display: flex; flex-direction: column; box-shadow: 5px 0 15px rgba(0,0,0,0.5); z-index: 10; }
+        h3 { color: var(--accent); margin-top: 0; letter-spacing: 1px; font-size: 1.2rem; text-shadow: 0 0 10px rgba(0,255,136,0.3); }
+        
+        .action-btn { background: var(--accent); color: black; font-weight: bold; padding: 14px; border-radius: 8px; border: none; cursor: pointer; margin-bottom: 20px; transition: 0.3s; width: 100%; box-shadow: 0 4px 15px rgba(0,255,136,0.2); }
+        .action-btn:hover { transform: translateY(-2px); filter: brightness(1.1); box-shadow: 0 6px 20px rgba(0,255,136,0.4); }
+        
+        .file-btn { background: #1a1a1e; border: 1px solid #333; color: #aaa; padding: 12px; margin-bottom: 8px; border-radius: 6px; cursor: pointer; text-align: left; transition: 0.2s; width: 100%; font-size: 13px; }
+        .file-btn:hover { border-color: var(--accent); color: white; background: #222228; }
 
-<script src='https://cdn.jsdelivr.net/gh/ethanaobrien/emulatorjs@main/data/loader.js'></script>
+        /* Main Area & Phone Styling */
+        #main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle at center, #1a1a20 0%, #0a0a0c 100%); }
+        #emulator-container { width: 360px; height: 740px; background: #000; border: 12px solid #222; border-radius: 45px; position: relative; box-shadow: 0 25px 60px rgba(0,0,0,0.8); overflow: hidden; }
+        #game { width: 100%; height: 100%; }
 
-<div style="margin-top: 20px; text-align: center;">
-    <input type="file" id="apk-selector" accept=".apk" style="display:none">
-    <button onclick="document.getElementById('apk-selector').click()" 
-            style="padding:10px 20px; background:#00ff88; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">
-        📂 LOAD YOUR APK
-    </button>
-</div>
+        #status-bar { position: absolute; bottom: 30px; font-size: 11px; color: #555; font-family: monospace; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
 
-<script>
-    // This connects your file button to the emulator
-    document.getElementById('apk-selector').onchange = function(e) {
-        const file = e.target.files[0];
-        if (file) {
+    <div id="sidebar">
+        <h3>APK WORKSPACE</h3>
+        <input type="file" id="apk-selector" accept=".apk" style="display:none">
+        <button class="action-btn" onclick="document.getElementById('apk-selector').click()">📂 SELECT APK</button>
+        
+        <div id="file-list" style="overflow-y: auto; flex: 1;">
+            <div style="color:#444; font-size: 12px; text-align: center; margin-top: 20px;">No apps loaded</div>
+        </div>
+        
+        <button class="file-btn" style="text-align:center; margin-top: 10px;" onclick="location.reload()">🔄 REBOOT SYSTEM</button>
+    </div>
+
+    <div id="main">
+        <div id="emulator-container">
+            <div id="game"></div>
+        </div>
+        <div id="status-bar">SYSTEM ENGINE: LOCAL_STABLE</div>
+    </div>
+
+    <script type="text/javascript">
+        // Points to the folder in your GitHub repo
+        window.EJS_pathtodata = './data/'; 
+        window.EJS_player = '#game';
+        window.EJS_core = 'android';
+        window.EJS_gameUrl = ''; 
+
+        const fileList = document.getElementById('file-list');
+        const statusBar = document.getElementById('status-bar');
+
+        document.getElementById('apk-selector').onchange = function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                // Clear the "No apps loaded" text
+                fileList.innerHTML = "";
+                
+                // Add the file to the sidebar "App Drawer"
+                const btn = document.createElement('button');
+                btn.className = 'file-btn';
+                btn.innerText = "🎮 " + file.name;
+                btn.onclick = () => bootApp(file);
+                fileList.appendChild(btn);
+                
+                bootApp(file);
+            }
+        };
+
+        function bootApp(file) {
             const url = URL.createObjectURL(file);
-            // This force-starts the engine with your uploaded APK
-            EJS_gameUrl = url;
+            window.EJS_gameUrl = url;
+            statusBar.innerText = "BOOTING: " + file.name.toUpperCase();
+            
             if (typeof EJS_load === 'function') {
                 EJS_load();
             } else {
-                alert("Engine still loading... wait 3 seconds and try again.");
+                statusBar.innerText = "ERROR: ENGINE NOT INITIALIZED";
             }
         }
-    };
-</script>
+    </script>
+</body>
+</html>
