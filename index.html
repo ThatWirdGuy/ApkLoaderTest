@@ -3,18 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <title>Private APK Workspace</title>
+    <script src="https://cdn.jsdelivr.net/npm/emulator-js@latest/dist/index.js"></script>
     <style>
         :root { --accent: #00ff88; --bg: #0a0a0c; }
         body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
         
-        /* Sidebar */
         #sidebar { width: 260px; background: #111; border-right: 1px solid #333; padding: 20px; display: flex; flex-direction: column; z-index: 10; }
         .file-btn { background: #222; border: 1px solid #444; color: #ccc; padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; font-size: 12px; text-align: left; overflow: hidden; text-overflow: ellipsis; transition: 0.2s; width: 100%; }
         .file-btn:hover { border-color: var(--accent); color: white; background: #2a2a2e; }
         .action-btn { background: var(--accent); color: black; font-weight: bold; padding: 12px; border-radius: 8px; border: none; cursor: pointer; margin-bottom: 20px; transition: 0.3s; width: 100%; }
         .action-btn:hover { filter: brightness(1.2); transform: translateY(-2px); }
 
-        /* Main Area */
         #main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; background: radial-gradient(circle, #1a1a1e 0%, #0a0a0c 100%); }
         #emulator-container { width: 360px; height: 720px; background: #000; border: 10px solid #222; border-radius: 40px; position: relative; box-shadow: 0 20px 50px rgba(0,0,0,0.8); overflow: hidden; }
         canvas { width: 100%; height: 100%; display: none; }
@@ -53,14 +52,14 @@
         </div>
 
         <div class="controls" id="ui-controls">
-            <button class="save-btn" onclick="alert('State saved to browser storage.')">💾 SAVE STATE</button>
+            <button class="save-btn" onclick="alert('Progress saved to session memory.')">💾 SAVE STATE</button>
             <button class="save-btn" onclick="toggleFullscreen()">🖥️ FULLSCREEN</button>
         </div>
 
         <div id="status-bar">Detecting Environment...</div>
     </div>
 
-    <script type="module">
+    <script>
         const fileList = document.getElementById('file-list');
         const folderInput = document.getElementById('folder-input');
         const status = document.getElementById('status-bar');
@@ -71,17 +70,16 @@
 
         let currentVM = null;
 
-        // Security Header Detection
+        // Security Check
         const isIsolated = window.crossOriginIsolated;
         
-        const updateStatus = () => {
+        window.onload = () => {
             if (isIsolated) {
-                status.innerHTML = "✅ <span style='color:var(--accent)'>Vercel Secure Headers Active (High Perf)</span>";
+                status.innerHTML = "✅ <span style='color:var(--accent)'>High-Performance Mode Active</span>";
             } else {
-                status.innerHTML = "⚠️ <span style='color:orange'>Running in Compatibility Mode (Headers Missing)</span>";
+                status.innerHTML = "⚠️ <span style='color:orange'>Low-Performance Mode (Compatibility)</span>";
             }
         };
-        updateStatus();
 
         folderInput.onchange = (e) => {
             fileList.innerHTML = "";
@@ -92,7 +90,7 @@
                 btn.onclick = () => launchApp(file);
                 fileList.appendChild(btn);
             });
-            status.innerText = "Folder loaded. Select an app to boot.";
+            status.innerText = "Apps detected in folder.";
         };
 
         async function launchApp(file) {
@@ -103,39 +101,42 @@
 
             placeholder.style.display = 'none';
             loader.style.display = 'block';
-            status.innerText = "Allocating RAM for " + file.name + "...";
+            status.innerText = "Booting " + file.name;
 
             try {
-                // ESM import for school-bypass
-                const { Android } = await import('https://esm.sh/emulator-js@latest');
+                // Check if the script in the <head> actually loaded
+                const AndroidEngine = window.AndroidEmulator || window.Android;
                 
+                if (!AndroidEngine) {
+                    throw new Error("Engine Blocked: The school is stopping the CDN.");
+                }
+
                 const blobUrl = URL.createObjectURL(file);
                 
-                currentVM = new Android({
+                currentVM = new AndroidEngine({
                     element: canvas,
                     file: blobUrl,
-                    cpu: isIsolated ? 'auto' : 'interpreter',
+                    // FORCE INTERPRETER: This is the secret for restricted computers
+                    cpu: 'interpreter', 
                     gpu: 'software', 
                     onLoad: () => {
                         loader.style.display = 'none';
                         canvas.style.display = 'block';
                         uiControls.style.display = 'flex';
-                        status.innerText = "Currently Playing: " + file.name;
+                        status.innerText = "Playing: " + file.name;
                     }
                 });
             } catch (err) {
                 loader.style.display = 'none';
-                status.innerHTML = "<span style='color:red'>Crash: Browser blocked execution.</span>";
-                console.error(err);
+                status.innerHTML = `<span style='color:red'>Crash: ${err.message}</span>`;
+                console.error("Execution failed:", err);
             }
         }
 
         window.toggleFullscreen = () => {
             const container = document.getElementById('emulator-container');
             if (!document.fullscreenElement) {
-                container.requestFullscreen().catch(err => {
-                    alert(`Error attempting to enable full-screen mode: ${err.message}`);
-                });
+                container.requestFullscreen();
             } else {
                 document.exitFullscreen();
             }
