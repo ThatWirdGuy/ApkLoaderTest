@@ -1,64 +1,86 @@
-<script type="module">
-    const dropZone = document.getElementById('drop-zone');
-    const fileInput = document.getElementById('apk-input');
-    const status = document.getElementById('status-text');
-    const canvas = document.getElementById('android-canvas');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Private APK Workspace</title>
+    <style>
+        :root { --accent: #00ff88; --bg: #0a0a0c; }
+        body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Sidebar for your APK folder */
+        #sidebar { width: 250px; background: #111; border-right: 1px solid #333; padding: 20px; display: flex; flex-direction: column; }
+        .file-btn { background: #222; border: 1px solid #444; color: #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; cursor: pointer; font-size: 12px; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+        .file-btn:hover { border-color: var(--accent); color: white; }
 
-    dropZone.onclick = () => fileInput.click();
+        /* Main Emulator Area */
+        #main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        #emulator-container { width: 360px; height: 720px; background: #000; border: 10px solid #222; border-radius: 30px; position: relative; box-shadow: 0 0 50px rgba(0,0,0,0.5); }
+        canvas { width: 100%; height: 100%; border-radius: 20px; }
+        
+        #status-bar { position: absolute; bottom: 20px; font-size: 12px; color: #666; font-family: monospace; }
+        .loading-ring { border: 4px solid #333; border-top: 4px solid var(--accent); border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
 
-    fileInput.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    <div id="sidebar">
+        <h3 style="color: var(--accent)">APK Folder</h3>
+        <p style="font-size: 11px; color: #666;">Select files from your local folder to load them into the workspace.</p>
+        <input type="file" id="folder-input" multiple accept=".apk" style="display:none">
+        <button class="file-btn" onclick="document.getElementById('folder-input').click()" style="background: var(--accent); color: black; font-weight: bold;">+ Load APKs</button>
+        <div id="file-list"></div>
+    </div>
 
-        dropZone.style.display = 'none';
-        canvas.style.display = 'block';
-        status.innerText = "Detecting browser capabilities...";
+    <div id="main">
+        <div id="emulator-container">
+            <div id="loader" class="loading-ring" style="position: absolute; top: 45%; left: 45%;"></div>
+            <canvas id="android-canvas"></canvas>
+        </div>
+        <div id="status-bar">System Ready | Waiting for APK...</div>
+    </div>
 
-        // Check if running via file:// (which causes errors)
-        if (window.location.protocol === 'file:') {
-            status.innerHTML = "<b>Security Warning:</b> Browsers block emulators when opened as a double-clicked file.<br>Please use a local server or upload to GitHub Pages.";
-            status.style.color = "#ff9800";
-        }
+    <script type="module">
+        const fileList = document.getElementById('file-list');
+        const folderInput = document.getElementById('folder-input');
+        const status = document.getElementById('status-bar');
+        const loader = document.getElementById('loader');
+        const canvas = document.getElementById('android-canvas');
 
-        try {
-            status.innerText = "Attempting High-Performance Load...";
-            
-            // Try the main engine first
-            const engine = await import('https://cdn.jsdelivr.net/npm/@myandroid/wasm-core@latest/dist/index.js');
-            
-            await engine.launch({
-                canvas: canvas,
-                apk: file,
-                memory: 512,
-                cpu: "auto", // Engine will try SIMD, then fallback
-                gpu: "webgl2"
+        folderInput.onchange = (e) => {
+            fileList.innerHTML = "";
+            Array.from(e.target.files).forEach(file => {
+                const btn = document.createElement('button');
+                btn.className = 'file-btn';
+                btn.innerText = file.name;
+                btn.onclick = () => launchApp(file);
+                fileList.appendChild(btn);
             });
+            status.innerText = "Folder loaded. Select an app to play.";
+        };
 
-            status.innerText = "Running: " + file.name;
-
-        } catch (primaryErr) {
-            console.warn("Primary engine failed, switching to Lite Mode...", primaryErr);
-            status.innerText = "SIMD Blocked. Starting Lite Compatibility Mode...";
-
+        async function launchApp(file) {
+            status.innerText = "Initializing VM for " + file.name + "...";
+            loader.style.display = 'block';
+            
             try {
-                // FALLBACK: Load the Lite engine (No SIMD required)
-                const liteEngine = await import('https://cdn.jsdelivr.net/npm/@myandroid/wasm-lite@latest/dist/index.js');
+                // Using a more robust CDN that handles Vercel environments well
+                const { Android } = await import('https://esm.sh/emulator-js');
                 
-                await liteEngine.launch({
-                    canvas: canvas,
-                    apk: file,
-                    memory: 256, 
-                    cpu: "interpreter", // No hardware acceleration needed
-                    gpu: "software"     // Basic rendering
+                const vm = new Android({
+                    element: canvas,
+                    file: URL.createObjectURL(file),
+                    onLoad: () => {
+                        loader.style.display = 'none';
+                        status.innerText = "Playing: " + file.name;
+                    }
                 });
-
-                status.innerText = "Running (Lite Mode): " + file.name;
-
-            } catch (liteErr) {
-                console.error(liteErr);
-                status.innerHTML = "<b>Execution Blocked:</b> Your browser's security settings (COOP/COEP) are preventing the emulator from starting.<br><small>Try Chrome with 'Experimental WebAssembly' enabled.</small>";
-                status.style.color = "#f44336";
+            } catch (err) {
+                status.innerText = "Error: Browser blocked emulator engine.";
+                loader.style.display = 'none';
+                console.error(err);
             }
         }
-    };
-</script>
+    </script>
+</body>
+</html>
