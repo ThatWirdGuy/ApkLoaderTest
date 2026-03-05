@@ -1,146 +1,42 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Private APK Workspace</title>
-    <script src="https://cdn.jsdelivr.net/npm/emulator-js@latest/dist/index.js"></script>
-    <style>
-        :root { --accent: #00ff88; --bg: #0a0a0c; }
-        body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        
-        #sidebar { width: 260px; background: #111; border-right: 1px solid #333; padding: 20px; display: flex; flex-direction: column; z-index: 10; }
-        .file-btn { background: #222; border: 1px solid #444; color: #ccc; padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; font-size: 12px; text-align: left; overflow: hidden; text-overflow: ellipsis; transition: 0.2s; width: 100%; }
-        .file-btn:hover { border-color: var(--accent); color: white; background: #2a2a2e; }
-        .action-btn { background: var(--accent); color: black; font-weight: bold; padding: 12px; border-radius: 8px; border: none; cursor: pointer; margin-bottom: 20px; transition: 0.3s; width: 100%; }
-        .action-btn:hover { filter: brightness(1.2); transform: translateY(-2px); }
+<div style='width:100%;height:100%;max-width:100%; background:#000; border-radius:20px; overflow:hidden;'>
+    <div id='game'></div>
+</div>
+ 
+<script type='text/javascript'>
+    // This tells the engine to use the Android system instead of N64
+    EJS_player = '#game';
+    EJS_core = 'android';  
+    
+    // We leave gameUrl blank so you can pick the APK from your computer
+    EJS_gameUrl = ''; 
+    
+    // Using the same path that worked for your SM64 test
+    EJS_pathtodata = 'https://cdn.jsdelivr.net/gh/ethanaobrien/emulatorjs@main/data/';
+</script>
 
-        #main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; background: radial-gradient(circle, #1a1a1e 0%, #0a0a0c 100%); }
-        #emulator-container { width: 360px; height: 720px; background: #000; border: 10px solid #222; border-radius: 40px; position: relative; box-shadow: 0 20px 50px rgba(0,0,0,0.8); overflow: hidden; }
-        canvas { width: 100%; height: 100%; display: none; }
-        
-        #status-bar { position: absolute; bottom: 20px; font-size: 11px; color: #888; font-family: monospace; text-align: center; width: 80%; }
-        .loading-ring { border: 4px solid #333; border-top: 4px solid var(--accent); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; display: none; position: absolute; top: 46%; left: 44%; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        .controls { margin-top: 15px; display: none; gap: 10px; }
-        .save-btn { background: #333; color: #eee; border: 1px solid #444; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-size: 11px; }
-        .save-btn:hover { background: #444; }
-    </style>
-</head>
-<body>
+<script src='https://cdn.jsdelivr.net/gh/ethanaobrien/emulatorjs@main/data/loader.js'></script>
 
-    <div id="sidebar">
-        <h3 style="color: var(--accent); margin-top: 0; letter-spacing: 1px;">APK WORKSPACE</h3>
-        <input type="file" id="folder-input" multiple accept=".apk" style="display:none">
-        <button class="action-btn" onclick="document.getElementById('folder-input').click()">📁 LOAD APK FOLDER</button>
-        
-        <div id="file-list" style="overflow-y: auto; flex: 1;"></div>
-        
-        <div style="border-top: 1px solid #333; padding-top: 15px;">
-            <button class="save-btn" style="width: 100%;" onclick="location.reload()">🔄 REBOOT SYSTEM</button>
-        </div>
-    </div>
+<div style="margin-top: 20px; text-align: center;">
+    <input type="file" id="apk-selector" accept=".apk" style="display:none">
+    <button onclick="document.getElementById('apk-selector').click()" 
+            style="padding:10px 20px; background:#00ff88; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">
+        📂 LOAD YOUR APK
+    </button>
+</div>
 
-    <div id="main">
-        <div id="emulator-container">
-            <div id="loader" class="loading-ring"></div>
-            <canvas id="android-canvas"></canvas>
-            <div id="placeholder" style="color: #444; text-align: center; margin-top: 320px; padding: 20px;">
-                <p>System Ready</p>
-                <small>Select an APK to begin emulation</small>
-            </div>
-        </div>
-
-        <div class="controls" id="ui-controls">
-            <button class="save-btn" onclick="alert('Progress saved to session memory.')">💾 SAVE STATE</button>
-            <button class="save-btn" onclick="toggleFullscreen()">🖥️ FULLSCREEN</button>
-        </div>
-
-        <div id="status-bar">Detecting Environment...</div>
-    </div>
-
-    <script>
-        const fileList = document.getElementById('file-list');
-        const folderInput = document.getElementById('folder-input');
-        const status = document.getElementById('status-bar');
-        const loader = document.getElementById('loader');
-        const canvas = document.getElementById('android-canvas');
-        const placeholder = document.getElementById('placeholder');
-        const uiControls = document.getElementById('ui-controls');
-
-        let currentVM = null;
-
-        // Security Check
-        const isIsolated = window.crossOriginIsolated;
-        
-        window.onload = () => {
-            if (isIsolated) {
-                status.innerHTML = "✅ <span style='color:var(--accent)'>High-Performance Mode Active</span>";
+<script>
+    // This connects your file button to the emulator
+    document.getElementById('apk-selector').onchange = function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const url = URL.createObjectURL(file);
+            // This force-starts the engine with your uploaded APK
+            EJS_gameUrl = url;
+            if (typeof EJS_load === 'function') {
+                EJS_load();
             } else {
-                status.innerHTML = "⚠️ <span style='color:orange'>Low-Performance Mode (Compatibility)</span>";
-            }
-        };
-
-        folderInput.onchange = (e) => {
-            fileList.innerHTML = "";
-            Array.from(e.target.files).forEach(file => {
-                const btn = document.createElement('button');
-                btn.className = 'file-btn';
-                btn.innerText = "🎮 " + file.name;
-                btn.onclick = () => launchApp(file);
-                fileList.appendChild(btn);
-            });
-            status.innerText = "Apps detected in folder.";
-        };
-
-        async function launchApp(file) {
-            if (currentVM) {
-                location.reload(); 
-                return;
-            }
-
-            placeholder.style.display = 'none';
-            loader.style.display = 'block';
-            status.innerText = "Booting " + file.name;
-
-            try {
-                // Check if the script in the <head> actually loaded
-                const AndroidEngine = window.AndroidEmulator || window.Android;
-                
-                if (!AndroidEngine) {
-                    throw new Error("Engine Blocked: The school is stopping the CDN.");
-                }
-
-                const blobUrl = URL.createObjectURL(file);
-                
-                currentVM = new AndroidEngine({
-                    element: canvas,
-                    file: blobUrl,
-                    // FORCE INTERPRETER: This is the secret for restricted computers
-                    cpu: 'interpreter', 
-                    gpu: 'software', 
-                    onLoad: () => {
-                        loader.style.display = 'none';
-                        canvas.style.display = 'block';
-                        uiControls.style.display = 'flex';
-                        status.innerText = "Playing: " + file.name;
-                    }
-                });
-            } catch (err) {
-                loader.style.display = 'none';
-                status.innerHTML = `<span style='color:red'>Crash: ${err.message}</span>`;
-                console.error("Execution failed:", err);
+                alert("Engine still loading... wait 3 seconds and try again.");
             }
         }
-
-        window.toggleFullscreen = () => {
-            const container = document.getElementById('emulator-container');
-            if (!document.fullscreenElement) {
-                container.requestFullscreen();
-            } else {
-                document.exitFullscreen();
-            }
-        };
-    </script>
-</body>
-</html>
+    };
+</script>
