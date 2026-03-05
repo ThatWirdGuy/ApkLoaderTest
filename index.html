@@ -1,97 +1,81 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Private APK Workspace</title>
-    <style>
-        :root { --accent: #00ff88; --bg: #0a0a0c; }
-        body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        #sidebar { width: 250px; background: #111; border-right: 1px solid #333; padding: 20px; display: flex; flex-direction: column; }
-        .file-btn { background: #222; border: 1px solid #444; color: #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; cursor: pointer; font-size: 12px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: 0.2s; }
-        .file-btn:hover { border-color: var(--accent); color: white; background: #2a2a2e; }
-        #main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; background: radial-gradient(circle, #1a1a1e 0%, #0a0a0c 100%); }
-        #emulator-container { width: 360px; height: 720px; background: #000; border: 10px solid #222; border-radius: 35px; position: relative; box-shadow: 0 0 50px rgba(0,0,0,0.8); overflow: hidden; }
-        canvas { width: 100%; height: 100%; display: none; }
-        #status-bar { position: absolute; bottom: 20px; font-size: 11px; color: #666; font-family: monospace; letter-spacing: 1px; }
-        .loading-ring { border: 4px solid #333; border-top: 4px solid var(--accent); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; display: none; z-index: 10; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
-</head>
-<body>
+<script type="module">
+    const fileList = document.getElementById('file-list');
+    const folderInput = document.getElementById('folder-input');
+    const status = document.getElementById('status-bar');
+    const loader = document.getElementById('loader');
+    const canvas = document.getElementById('android-canvas');
+    const placeholder = document.getElementById('placeholder');
+    const uiControls = document.getElementById('ui-controls');
 
-    <div id="sidebar">
-        <h3 style="color: var(--accent); margin-top: 0;">APK Explorer</h3>
-        <input type="file" id="folder-input" multiple accept=".apk" style="display:none">
-        <button class="file-btn" onclick="document.getElementById('folder-input').click()" style="background: var(--accent); color: black; font-weight: bold; text-align: center;">LOAD APK FOLDER</button>
-        <div id="file-list" style="overflow-y: auto; margin-top: 10px;"></div>
-    </div>
+    let currentVM = null;
 
-    <div id="main">
-        <div id="emulator-container">
-            <div id="loader" class="loading-ring" style="position: absolute; top: 46%; left: 44%;"></div>
-            <canvas id="android-canvas"></canvas>
-            <div id="placeholder" style="color: #444; text-align: center; margin-top: 300px;">Select an app to boot</div>
-        </div>
-        <div id="status-bar">Vercel Mode: Secure Headers Required</div>
-    </div>
-
-    <script type="module">
-        const fileList = document.getElementById('file-list');
-        const folderInput = document.getElementById('folder-input');
-        const status = document.getElementById('status-bar');
-        const loader = document.getElementById('loader');
-        const canvas = document.getElementById('android-canvas');
-        const placeholder = document.getElementById('placeholder');
-
-        let currentVM = null;
-
-        folderInput.onchange = (e) => {
-            fileList.innerHTML = "";
-            Array.from(e.target.files).forEach(file => {
-                const btn = document.createElement('button');
-                btn.className = 'file-btn';
-                btn.innerText = "📄 " + file.name;
-                btn.onclick = () => launchApp(file);
-                fileList.appendChild(btn);
-            });
-            status.innerText = "Folder Ready. Select an APK.";
-        };
-
-        async function launchApp(file) {
-            // Memory Cleanup: Browsers can't easily kill WASM, so we hide the evidence
-            if (currentVM) {
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                status.innerText = "Restarting VM...";
-            }
-
-            placeholder.style.display = 'none';
-            canvas.style.display = 'none';
-            loader.style.display = 'block';
-            status.innerText = "Allocating RAM for " + file.name;
-
-            try {
-                // Using esm.sh for reliable school-bypass imports
-                const { Android } = await import('https://esm.sh/emulator-js@latest');
-                
-                const blobUrl = URL.createObjectURL(file);
-                
-                currentVM = new Android({
-                    element: canvas,
-                    file: blobUrl,
-                    cpu: 'interpreter', // Slower but bypasses "SIMD" errors
-                    onLoad: () => {
-                        loader.style.display = 'none';
-                        canvas.style.display = 'block';
-                        status.innerText = "ACTIVE: " + file.name;
-                    }
-                });
-            } catch (err) {
-                loader.style.display = 'none';
-                status.innerHTML = "<span style='color:#ff4444'>Security Fail: Add vercel.json to your repo!</span>";
-                console.error("Critical: Headers missing or block active.", err);
-            }
+    // Detection: Checks if vercel.json headers are active
+    const isIsolated = window.crossOriginIsolated;
+    
+    const updateStatus = () => {
+        if (isIsolated) {
+            status.innerHTML = "✅ <span style='color:var(--accent)'>Vercel Secure Headers Active (High Perf)</span>";
+        } else {
+            status.innerHTML = "⚠️ <span style='color:orange'>Running in Compatibility Mode (Headers Missing)</span>";
         }
-    </script>
-</body>
-</html>
+    };
+    updateStatus();
+
+    folderInput.onchange = (e) => {
+        fileList.innerHTML = "";
+        Array.from(e.target.files).forEach(file => {
+            const btn = document.createElement('button');
+            btn.className = 'file-btn';
+            btn.innerText = "🎮 " + file.name;
+            btn.onclick = () => launchApp(file);
+            fileList.appendChild(btn);
+        });
+        status.innerText = "Folder loaded. Select an app to boot.";
+    };
+
+    async function launchApp(file) {
+        // Cleanup old VM session
+        if (currentVM) {
+            location.reload(); // The cleanest way to wipe WASM memory in a browser
+            return;
+        }
+
+        placeholder.style.display = 'none';
+        loader.style.display = 'block';
+        status.innerText = "Allocating RAM for " + file.name + "...";
+
+        try {
+            // Using esm.sh for the most reliable school-bypass import
+            const { Android } = await import('https://esm.sh/emulator-js@latest');
+            
+            const blobUrl = URL.createObjectURL(file);
+            
+            currentVM = new Android({
+                element: canvas,
+                file: blobUrl,
+                // If headers are missing, we force 'interpreter' to prevent a crash
+                cpu: isIsolated ? 'auto' : 'interpreter',
+                gpu: 'software', 
+                onLoad: () => {
+                    loader.style.display = 'none';
+                    canvas.style.display = 'block';
+                    uiControls.style.display = 'flex';
+                    status.innerText = "Currently Playing: " + file.name;
+                }
+            });
+        } catch (err) {
+            loader.style.display = 'none';
+            status.innerHTML = "<span style='color:red'>Crash: Browser blocked execution.</span>";
+            console.error(err);
+        }
+    }
+
+    // Fullscreen Toggle
+    window.toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            document.getElementById('emulator-container').requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    };
+</script>
