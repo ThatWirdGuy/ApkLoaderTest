@@ -6,38 +6,33 @@
     <style>
         :root { --accent: #00ff88; --bg: #0a0a0c; }
         body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        
-        /* Sidebar for your APK folder */
         #sidebar { width: 250px; background: #111; border-right: 1px solid #333; padding: 20px; display: flex; flex-direction: column; }
-        .file-btn { background: #222; border: 1px solid #444; color: #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; cursor: pointer; font-size: 12px; text-align: left; overflow: hidden; text-overflow: ellipsis; }
-        .file-btn:hover { border-color: var(--accent); color: white; }
-
-        /* Main Emulator Area */
-        #main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
-        #emulator-container { width: 360px; height: 720px; background: #000; border: 10px solid #222; border-radius: 30px; position: relative; box-shadow: 0 0 50px rgba(0,0,0,0.5); }
-        canvas { width: 100%; height: 100%; border-radius: 20px; }
-        
-        #status-bar { position: absolute; bottom: 20px; font-size: 12px; color: #666; font-family: monospace; }
-        .loading-ring { border: 4px solid #333; border-top: 4px solid var(--accent); border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; display: none; }
+        .file-btn { background: #222; border: 1px solid #444; color: #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; cursor: pointer; font-size: 12px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: 0.2s; }
+        .file-btn:hover { border-color: var(--accent); color: white; background: #2a2a2e; }
+        #main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; background: radial-gradient(circle, #1a1a1e 0%, #0a0a0c 100%); }
+        #emulator-container { width: 360px; height: 720px; background: #000; border: 10px solid #222; border-radius: 35px; position: relative; box-shadow: 0 0 50px rgba(0,0,0,0.8); overflow: hidden; }
+        canvas { width: 100%; height: 100%; display: none; }
+        #status-bar { position: absolute; bottom: 20px; font-size: 11px; color: #666; font-family: monospace; letter-spacing: 1px; }
+        .loading-ring { border: 4px solid #333; border-top: 4px solid var(--accent); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; display: none; z-index: 10; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
     <div id="sidebar">
-        <h3 style="color: var(--accent)">APK Folder</h3>
-        <p style="font-size: 11px; color: #666;">Select files from your local folder to load them into the workspace.</p>
+        <h3 style="color: var(--accent); margin-top: 0;">APK Explorer</h3>
         <input type="file" id="folder-input" multiple accept=".apk" style="display:none">
-        <button class="file-btn" onclick="document.getElementById('folder-input').click()" style="background: var(--accent); color: black; font-weight: bold;">+ Load APKs</button>
-        <div id="file-list"></div>
+        <button class="file-btn" onclick="document.getElementById('folder-input').click()" style="background: var(--accent); color: black; font-weight: bold; text-align: center;">LOAD APK FOLDER</button>
+        <div id="file-list" style="overflow-y: auto; margin-top: 10px;"></div>
     </div>
 
     <div id="main">
         <div id="emulator-container">
-            <div id="loader" class="loading-ring" style="position: absolute; top: 45%; left: 45%;"></div>
+            <div id="loader" class="loading-ring" style="position: absolute; top: 46%; left: 44%;"></div>
             <canvas id="android-canvas"></canvas>
+            <div id="placeholder" style="color: #444; text-align: center; margin-top: 300px;">Select an app to boot</div>
         </div>
-        <div id="status-bar">System Ready | Waiting for APK...</div>
+        <div id="status-bar">Vercel Mode: Secure Headers Required</div>
     </div>
 
     <script type="module">
@@ -46,39 +41,55 @@
         const status = document.getElementById('status-bar');
         const loader = document.getElementById('loader');
         const canvas = document.getElementById('android-canvas');
+        const placeholder = document.getElementById('placeholder');
+
+        let currentVM = null;
 
         folderInput.onchange = (e) => {
             fileList.innerHTML = "";
             Array.from(e.target.files).forEach(file => {
                 const btn = document.createElement('button');
                 btn.className = 'file-btn';
-                btn.innerText = file.name;
+                btn.innerText = "📄 " + file.name;
                 btn.onclick = () => launchApp(file);
                 fileList.appendChild(btn);
             });
-            status.innerText = "Folder loaded. Select an app to play.";
+            status.innerText = "Folder Ready. Select an APK.";
         };
 
         async function launchApp(file) {
-            status.innerText = "Initializing VM for " + file.name + "...";
+            // Memory Cleanup: Browsers can't easily kill WASM, so we hide the evidence
+            if (currentVM) {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                status.innerText = "Restarting VM...";
+            }
+
+            placeholder.style.display = 'none';
+            canvas.style.display = 'none';
             loader.style.display = 'block';
-            
+            status.innerText = "Allocating RAM for " + file.name;
+
             try {
-                // Using a more robust CDN that handles Vercel environments well
-                const { Android } = await import('https://esm.sh/emulator-js');
+                // Using esm.sh for reliable school-bypass imports
+                const { Android } = await import('https://esm.sh/emulator-js@latest');
                 
-                const vm = new Android({
+                const blobUrl = URL.createObjectURL(file);
+                
+                currentVM = new Android({
                     element: canvas,
-                    file: URL.createObjectURL(file),
+                    file: blobUrl,
+                    cpu: 'interpreter', // Slower but bypasses "SIMD" errors
                     onLoad: () => {
                         loader.style.display = 'none';
-                        status.innerText = "Playing: " + file.name;
+                        canvas.style.display = 'block';
+                        status.innerText = "ACTIVE: " + file.name;
                     }
                 });
             } catch (err) {
-                status.innerText = "Error: Browser blocked emulator engine.";
                 loader.style.display = 'none';
-                console.error(err);
+                status.innerHTML = "<span style='color:#ff4444'>Security Fail: Add vercel.json to your repo!</span>";
+                console.error("Critical: Headers missing or block active.", err);
             }
         }
     </script>
